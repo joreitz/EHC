@@ -1,0 +1,33 @@
+{
+  "H": {
+    "atomic_number": 1,
+    "orbitals": [
+      { "n": 1, "l": 0, "exponent": 1.24, "coefficient": 1.0 }
+    ],
+    "vsie": [[1, 0, -13.6]]
+  },
+  "C": {
+    "atomic_number": 6,
+    "orbitals": [
+      { "n": 2, "l": 0, "exponent": 1.625, "coefficient": 1.0 },
+      { "n": 2, "l": 1, "exponent": 1.625, "coefficient": 1.0 }
+    ],
+    "vsie": [[2, 0, -21.4], [2, 1, -11.4]]
+  },
+  "N": {
+    "atomic_number": 7,
+    "orbitals": [
+      { "n": 2, "l": 0, "exponent": 1.95, "coefficient": 1.0 },
+      { "n": 2, "l": 1, "exponent": 1.95, "coefficient": 1.0 }
+    ],
+    "vsie": [[2, 0, -26.0], [2, 1, -13.4]]
+  },
+  "O": {
+    "atomic_number": 8,
+    "orbitals": [
+      { "n": 2, "l": 0, "exponent": 2.275, "coefficient": 1.0 },
+      { "n": 2, "l": 1, "exponent": 2.275, "coefficient": 1.0 }
+    ],
+    "vsie": [[2, 0, -32.3], [2, 1, -14.8]]
+  }
+}
