@@ -3,6 +3,7 @@ use std::collections::HashMap;
 use std::fs::File;
 use std::io::{Write, Result};
 
+mod pop_analysis;
 mod parser;
 // use parser::{AtomData, ElementBasis, load_basis_library};
 
@@ -44,6 +45,9 @@ struct Molecule {
     dist_matrix: Option<na::DMatrix<f64>>,
     s_mat: Option<na::DMatrix<f64>>,
     h_mat: Option<na::DMatrix<f64>>,
+    energies: Option<na::DVector<f64>>,
+    c_matrix: Option<na::DMatrix<f64>>,
+    s_sqrt: Option<na::DMatrix<f64>>,
 }
 
 impl Atom {
@@ -183,7 +187,7 @@ impl Molecule {
     };
     
     radial * cos_theta
-}
+    }
 
     fn overlap_pp(&self, atom_i: usize, atom_j: usize, s_sigma: f64, s_pi: f64) -> na::Matrix3<f64> {
         let p1 = na::Vector3::from_row_slice(&self.atoms[atom_i].position);
@@ -408,59 +412,137 @@ impl Molecule {
     hamiltonian
     }
 
-    fn solve(&self) -> (na::DVector<f64>, na::DMatrix<f64>) {
-    let h = self.h_mat.as_ref().unwrap();
-    let s = self.s_mat.as_ref().unwrap().clone();
-    
-    println!("Diagonalizing S matrix...");
-    
-    // S = U * λ * U^T diagonalisieren
-    let s_eigen = s.symmetric_eigen();
-    let s_vals = &s_eigen.eigenvalues;
-    let u = &s_eigen.eigenvectors;
-    
-    // Prüfe Eigenwerte
-    // println!("S eigenvalues:");
-    // for (i, &val) in s_vals.iter().enumerate() {
-    //     println!("  λ[{}] = {:.6}", i, val);
-    // }
-    
-    // Erstelle s^(-1/2) Matrix
-    let n = s_vals.len();
-    let mut s_inv_sqrt = na::DMatrix::<f64>::zeros(n, n);
-    for i in 0..n {
-        if s_vals[i] > 1e-10 {  // Nur wenn Eigenwert positiv
-            s_inv_sqrt[(i,i)] = 1.0 / s_vals[i].sqrt();
-        } else {
-            println!("Warning: Small/negative eigenvalue λ[{}] = {}", i, s_vals[i]);
-            s_inv_sqrt[(i,i)] = 0.0;  // Oder einen kleinen Wert
+    fn solve(&mut self) {
+        let h = self.h_mat.as_ref().unwrap();
+        let s = self.s_mat.as_ref().unwrap();
+        
+        println!("Diagonalizing S matrix...");
+        let s_eigen = s.clone().symmetric_eigen();
+        let s_vals = &s_eigen.eigenvalues;
+        let u = &s_eigen.eigenvectors;
+        
+        let n = s_vals.len();
+        let mut s_inv_sqrt = na::DMatrix::<f64>::zeros(n, n);
+        let mut s_sqrt_diag = na::DMatrix::<f64>::zeros(n, n); 
+        
+        for i in 0..n {
+            if s_vals[i] > 1e-10 {
+                s_inv_sqrt[(i,i)] = 1.0 / s_vals[i].sqrt();
+                s_sqrt_diag[(i,i)] = s_vals[i].sqrt(); 
+            } else {
+                println!("Warning: Small/negative eigenvalue λ[{}] = {}", i, s_vals[i]);
+            }
         }
+        
+        let x = u * s_inv_sqrt * u.transpose();
+        let s_sqrt = u * s_sqrt_diag * u.transpose(); 
+        
+        println!("Transforming Hamiltonian...");
+        let h_prime = x.transpose() * h * &x;
+        
+        println!("Solving eigenvalue problem...");
+        let eigen = h_prime.symmetric_eigen();
+        let c = x * &eigen.eigenvectors;
+        
+        // Ergebnisse im Struct speichern!
+        self.energies = Some(eigen.eigenvalues);
+        self.c_matrix = Some(c);
+        self.s_sqrt = Some(s_sqrt);
     }
-    
-    // Transformationsmatrix X = U * s^(-1/2) * U^T
-    let x = u * s_inv_sqrt * u.transpose();
-    
-    // Transformierte Hamiltonmatrix H' = X^T * H * X
-    println!("Transforming Hamiltonian...");
-    let h_prime = x.transpose() * h * &x;
-    
-    // Löse Standard-Eigenwertproblem
-    println!("Solving eigenvalue problem...");
-    let eigen = h_prime.symmetric_eigen();
-    
-    println!("Orbital energies (eV):");
-    for (i, &e) in eigen.eigenvalues.iter().enumerate() {
-        println!("  E[{}] = {:.4} eV", i, e);
+
+    fn dipole_moment(&self, q: &[f64]) -> na::Vector3<f64> {
+        let mut mu = na::Vector3::zeros();
+        for (i, atom) in self.atoms.iter().enumerate() {
+            mu += q[i] * na::Vector3::from(atom.position); // position in Bohr, q in units of e
+        }
+        mu // in e·Bohr
+        }
+
+    fn lowdin_populations(&self) {
+        println!("Performing Löwdin population analysis...");
+        let c: &nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Dyn, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Dyn>> = self.c_matrix.as_ref().expect("Run solve() first!");
+        let e = self.energies.as_ref().expect("Run solve() first!");
+        let s_sqrt = self.s_sqrt.as_ref().expect("Run solve() first!");
+        let n_atoms = self.atoms.len();
+        let n_ao = self.orbitals.len();
+        let mut sorted_indices: Vec<usize> = (0..n_ao).collect();
+        sorted_indices.sort_by(|&a, &b| e[a].partial_cmp(&e[b]).unwrap());
+        let mut total_valectrons = 0;
+        let mut atom_valance_electron: Vec<f64> = vec![0.0; self.atoms.len()];
+        for (i, atom) in self.atoms.iter().enumerate() {
+            let val_e: usize = match atom._label.as_str() {
+                "H" => 1,
+                "Li" => 1,
+                "C" => 4,
+                "Si" => 4,
+                "N" => 5,
+                "P" => 5,
+                "O" => 6,
+                "S" => 6,
+                "F" => 7,
+                "Cl" => 7,
+                _ => panic!("Unknown element: {}", atom._label),
+            };
+            atom_valance_electron[i] = val_e as f64;
+            total_valectrons += val_e;
+        }
+        let n_occ = total_valectrons / 2;
+        let p_matrix = pop_analysis::orth_p_matrix(c, s_sqrt, n_occ, &sorted_indices);
+        println!("Total valence electrons: {}, Occupied MOs: {}", total_valectrons, n_occ);
+        println!("HOMO is MO {}", n_occ);
+        
+        let mut gap = vec![0.0; n_atoms];
+        let mut q = vec![0.0; n_atoms];
+
+        for mu in 0..n_ao {
+            let atom_id = self.orbitals[mu].atom_id;
+            let orbital_pop = p_matrix[(mu, mu)];
+            gap[atom_id] += orbital_pop;
+        }
+
+        for atom_id in 0..n_atoms {
+            q[atom_id] += atom_valance_electron[atom_id] - gap[atom_id];
+        }
+
+        println!("\nGross Atomic Populations:");
+        for (i, pop) in gap.iter().enumerate() {
+            println!("Atom {} ({}): {:.4} Elektronen", i, self.atoms[i]._label, pop);
+        }
+        println!("Partial Charges:");
+        for (i, charge) in q.iter().enumerate() {
+            println!("Atom {} ({}): {:.4}", i, self.atoms[i]._label, charge);
+        }
+
+        let mut wbi_matrix = na::DMatrix::<f64>::zeros(n_atoms, n_atoms);
+        for mu in 0..n_ao {
+            for nu in 0..n_ao {
+                let a1 = self.orbitals[mu].atom_id;
+                let a2 = self.orbitals[nu].atom_id;
+                let p_val = p_matrix[(mu, nu)];
+                wbi_matrix[(a1, a2)] += p_val * p_val;
+            }
+        }
+        println!("\n=== Wiberg Bond Indices (Bond Orders) ===");
+        println!("{:<8} | {:<8} | {:<12}", "Atom A", "Atom B", "Bond Index");
+        println!("------------------------------------");
+        for i in 0..n_atoms {
+            for j in i+1..n_atoms {
+                let bo = wbi_matrix[(i, j)];
+                if bo > 0.05 {
+                    println!("{:<8} | {:<8} | {:<12.4}", self.atoms[i]._label, self.atoms[j]._label, bo);
+                }
+            }
+        }
+
+        let mu = self.dipole_moment(&q);
+        let mu_debye = mu * 2.5418;
+        let mu_norm = mu_debye.norm();
+
+        println!("\n=== Dipolmoment ===");
+        println!("μ = ({:.4}, {:.4}, {:.4}) Debye", mu_debye.x, mu_debye.y, mu_debye.z);
+        println!("|μ| = {:.4} Debye", mu_norm);
     }
-    
-    // Rücktransformation der Eigenvektoren: C = X * C'
-    let c = x * &eigen.eigenvectors;
-    
-    (eigen.eigenvalues, c)
 }
-
-}
-
 
 
 fn main() {
@@ -475,6 +557,9 @@ fn main() {
         dist_matrix: None,
         s_mat: None,
         h_mat: None,
+        energies: None,
+        c_matrix: None,
+        s_sqrt: None,
     };
     
     for data in atom_data {
@@ -511,7 +596,8 @@ fn main() {
     writeln!(file, "=========================================")?;
     
     // 1. Solve nur EINMAL aufrufen und Daten speichern
-    let (energies, c_matrix) = molecule.solve();
+    let energies = molecule.energies.as_ref().unwrap();
+    let c_matrix = molecule.c_matrix.as_ref().unwrap();
     let n_orbitals = energies.len();
     
     // 2. Erstelle ein Array von 0 bis n und sortiere es anhand der Energien
@@ -557,8 +643,10 @@ fn main() {
         }
         writeln!(file)?;
     }
-    
+
     Ok(())
 }
-write_output(&molecule).expect("Failed to write output");
+    write_output(&molecule).expect("Failed to write output");
+
+    molecule.lowdin_populations();
 }
