@@ -456,10 +456,67 @@ impl Molecule {
             mu += q[i] * na::Vector3::from(atom.position); // position in Bohr, q in units of e
         }
         mu // in e·Bohr
+    }
+    
+    fn get_mo_character(&self, mo_idx: usize) -> String {
+        let c = self.c_matrix.as_ref().expect("Run solve() first!");
+        let s_sqrt = self.s_sqrt.as_ref().expect("Run solve() first!");
+        
+        // Transform the specific MO column into the orthogonalized basis: C_perp = S^(1/2) * C
+        let c_col = c.column(mo_idx);
+        let c_perp = s_sqrt * c_col;
+
+        let mut atom_pops = vec![0.0; self.atoms.len()];
+        let mut p_x_pop = 0.0;
+        let mut p_y_pop = 0.0;
+        let mut p_z_pop = 0.0;
+        let mut s_pop = 0.0;
+
+        // Sum up the squared coefficients (which now represent exact population percentages)
+        for mu in 0..self.orbitals.len() {
+            let pop = c_perp[mu].powi(2);
+            let orb = &self.orbitals[mu];
+            
+            atom_pops[orb.atom_id] += pop;
+            
+            if orb.l == 0 {
+                s_pop += pop;
+            } else if orb.l == 1 {
+                match orb._m {
+                    1 => p_x_pop += pop,   // px
+                    -1 => p_y_pop += pop,  // py
+                    0 => p_z_pop += pop,   // pz
+                    _ => {}
+                }
+            }
         }
+
+        // 1. Check for n (non-bonding) character
+        // If more than 75% of the electron density is localized on a single atom
+        let max_atom_pop = atom_pops.iter().copied().fold(f64::NAN, f64::max);
+        if max_atom_pop > 0.85 {
+            return "n (non-bonding)".to_string();
+        }
+
+        // 2. Check for pi character
+        // If the orbital is overwhelmingly made of p-orbitals pointing in ONE direction,
+        // with almost zero s-orbital mixing, it is a pi orbital. 
+        // (Assuming you orient planar molecules flat along Cartesian axes).
+        if p_x_pop > 0.75 && s_pop < 0.05 {
+            return "pi (px)".to_string();
+        } else if p_y_pop > 0.75 && s_pop < 0.05 {
+            return "pi (py)".to_string();
+        } else if p_z_pop > 0.75 && s_pop < 0.05 {
+            return "pi (pz)".to_string();
+        }
+
+        // 3. Otherwise, it is a sigma orbital (hybridized s and p character)
+        "sigma".to_string()
+    }
 
     fn lowdin_populations(&self) {
         println!("Performing Löwdin population analysis...");
+        
         let c: &nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Dyn, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Dyn>> = self.c_matrix.as_ref().expect("Run solve() first!");
         let e = self.energies.as_ref().expect("Run solve() first!");
         let s_sqrt = self.s_sqrt.as_ref().expect("Run solve() first!");
@@ -468,6 +525,7 @@ impl Molecule {
         let mut sorted_indices: Vec<usize> = (0..n_ao).collect();
         sorted_indices.sort_by(|&a, &b| e[a].partial_cmp(&e[b]).unwrap());
         let mut total_valectrons = 0;
+        
         let mut atom_valance_electron: Vec<f64> = vec![0.0; self.atoms.len()];
         for (i, atom) in self.atoms.iter().enumerate() {
             let val_e: usize = match atom._label.as_str() {
@@ -486,8 +544,10 @@ impl Molecule {
             atom_valance_electron[i] = val_e as f64;
             total_valectrons += val_e;
         }
+
         let n_occ = total_valectrons / 2;
         let p_matrix = pop_analysis::orth_p_matrix(c, s_sqrt, n_occ, &sorted_indices);
+        
         println!("Total valence electrons: {}, Occupied MOs: {}", total_valectrons, n_occ);
         println!("HOMO is MO {}", n_occ);
         
@@ -538,12 +598,78 @@ impl Molecule {
         let mu_debye = mu * 2.5418;
         let mu_norm = mu_debye.norm();
 
-        println!("\n=== Dipolmoment ===");
+        println!("\n=== Dipole moment ===");
         println!("μ = ({:.4}, {:.4}, {:.4}) Debye", mu_debye.x, mu_debye.y, mu_debye.z);
         println!("|μ| = {:.4} Debye", mu_norm);
-    }
-}
 
+        // --- Calculate All Allowed Transitions ---
+        println!("\n=== Symmetry Allowed Transitions (TDM > 0) ===");
+        println!("{:<28} | {:<28} | {:<12} | {:<30} | {:<10}", 
+                 "Initial MO", "Final MO", "Delta E (eV)", "TDM Vector (x, y, z) [Debye]", "|TDM| [Debye]");
+        println!("{:-<115}", "");
+
+        for i in 0..n_occ {
+            for j in n_occ..n_ao {
+                let mo_i = sorted_indices[i];
+                let mo_j = sorted_indices[j];
+                
+                let tdm = self.transition_dipole_moment(mo_i, mo_j);
+                let tdm_debye = tdm * 2.5418; 
+                let tdm_norm = tdm_debye.norm();
+                
+                if tdm_norm > 1e-4 {
+                    let energy_gap = e[mo_j] - e[mo_i];
+                    
+                    // Fetch the character of the orbitals
+                    let char_i = self.get_mo_character(mo_i);
+                    let char_j = self.get_mo_character(mo_j);
+                    
+                    let label_i = format!("MO {:<2} ({})", i + 1, char_i);
+                    let label_j = format!("MO {:<2} ({})", j + 1, char_j);
+
+                    println!(
+                        "{:<28} | {:<28} | {:<12.4} | ({:>6.3}, {:>6.3}, {:>6.3})             | {:.4}",
+                        label_i, 
+                        label_j, 
+                        energy_gap, 
+                        tdm_debye.x, tdm_debye.y, tdm_debye.z, 
+                        tdm_norm
+                    );
+                }
+            }
+        }
+        println!("{:-<115}", "");
+    }
+
+    fn transition_dipole_moment(&self, mo_i: usize, mo_j: usize) -> na::Vector3<f64> {
+        let c = self.c_matrix.as_ref().expect("Run solve() first!");
+        let s = self.s_mat.as_ref().expect("Run solve() first!");
+        let n_ao = self.orbitals.len();
+        
+        let mut tdm = na::Vector3::zeros();
+        
+        for mu in 0..n_ao {
+            let atom_mu = self.orbitals[mu].atom_id;
+            let pos_mu = na::Vector3::from(self.atoms[atom_mu].position);
+            
+            for nu in 0..n_ao {
+                let atom_nu = self.orbitals[nu].atom_id;
+                let pos_nu = na::Vector3::from(self.atoms[atom_nu].position);
+                
+                // Mulliken approximation: <mu | r | nu> ≈ S_{μν} * (R_μ + R_ν) / 2
+                let r_op = (pos_mu + pos_nu) / 2.0;
+                
+                let s_val = s[(mu, nu)];
+                let c_mu_i = c[(mu, mo_i)];
+                let c_nu_j = c[(nu, mo_j)];
+                
+                tdm += c_mu_i * c_nu_j * s_val * r_op;
+            }
+        }
+        
+        tdm 
+    }   
+}
 
 fn main() {
     let basis_lib = parser::load_basis_library("basis_library.json")
@@ -649,4 +775,5 @@ fn main() {
     write_output(&molecule).expect("Failed to write output");
 
     molecule.lowdin_populations();
+
 }
