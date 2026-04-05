@@ -462,7 +462,6 @@ impl Molecule {
         let c = self.c_matrix.as_ref().expect("Run solve() first!");
         let s_sqrt = self.s_sqrt.as_ref().expect("Run solve() first!");
         
-        // Transform the specific MO column into the orthogonalized basis: C_perp = S^(1/2) * C
         let c_col = c.column(mo_idx);
         let c_perp = s_sqrt * c_col;
 
@@ -472,7 +471,6 @@ impl Molecule {
         let mut p_z_pop = 0.0;
         let mut s_pop = 0.0;
 
-        // Sum up the squared coefficients (which now represent exact population percentages)
         for mu in 0..self.orbitals.len() {
             let pop = c_perp[mu].powi(2);
             let orb = &self.orbitals[mu];
@@ -491,26 +489,29 @@ impl Molecule {
             }
         }
 
-        // 1. Check for n (non-bonding) character
-        // If more than 75% of the electron density is localized on a single atom
-        let max_atom_pop = atom_pops.iter().copied().fold(f64::NAN, f64::max);
-        if max_atom_pop > 0.85 {
-            return "n (non-bonding)".to_string();
-        }
-
-        // 2. Check for pi character
-        // If the orbital is overwhelmingly made of p-orbitals pointing in ONE direction,
-        // with almost zero s-orbital mixing, it is a pi orbital. 
-        // (Assuming you orient planar molecules flat along Cartesian axes).
-        if p_x_pop > 0.75 && s_pop < 0.05 {
+        // 1. Check for pi character FIRST!
+        // A pi orbital is composed almost entirely of p-orbitals pointing in one direction.
+        // Even if it is polarized onto a single atom, its pure symmetry defines it as pi.
+        let pi_threshold = 0.9; // 85% pure p-character
+        if p_x_pop > pi_threshold && s_pop < 0.10 {
             return "pi (px)".to_string();
-        } else if p_y_pop > 0.75 && s_pop < 0.05 {
+        } else if p_y_pop > pi_threshold && s_pop < 0.10 {
             return "pi (py)".to_string();
-        } else if p_z_pop > 0.75 && s_pop < 0.05 {
+        } else if p_z_pop > pi_threshold && s_pop < 0.10 {
             return "pi (pz)".to_string();
         }
 
-        // 3. Otherwise, it is a sigma orbital (hybridized s and p character)
+        // 2. Check for n (non-bonding) character SECOND.
+        // If it isn't a pi orbital, but is highly localized on a single atom 
+        // (usually an in-plane p-orbital or sp-hybrid on a heteroatom), it is an n-orbital.
+        let max_atom_pop = atom_pops.iter().copied().fold(f64::NAN, f64::max);
+        let n_threshold = 0.65; // Lowered to 65% because neighboring atoms always have small symmetry-allowed tails
+        
+        if max_atom_pop > n_threshold {
+            return "n (non-bonding)".to_string();
+        }
+
+        // 3. Otherwise, it is a sigma orbital (delocalized with mixed s/p character)
         "sigma".to_string()
     }
 
