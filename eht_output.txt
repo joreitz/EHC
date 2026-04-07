@@ -42,3 +42,64 @@ Overlap Matrix (S):
    -0.000000    0.000000    0.000000    0.225970    0.000000    0.000000    0.000000    1.000000    0.000000    0.000000
     0.474785    0.437446   -0.268837    0.000000    0.057271    0.034473   -0.065662    0.000000    1.000000    0.147758
     0.474785   -0.437446   -0.268837    0.000000    0.057271   -0.034473   -0.065662    0.000000    0.147758    1.000000
+===========================
+
+Performing Löwdin population analysis...
+
+Total valence electrons: 12, Occupied MOs: 6
+HOMO is MO 6
+
+Gross Atomic Populations:
+Atom 0 (C): 3.1651 Elektronen
+Atom 1 (O): 6.8222 Elektronen
+Atom 2 (H): 1.0064 Elektronen
+Atom 3 (H): 1.0064 Elektronen
+Partial Charges:
+Atom 0 (C): 0.8349
+Atom 1 (O): -0.8222
+Atom 2 (H): -0.0064
+Atom 3 (H): -0.0064
+
+=== Wiberg Bond Indices (Bond Orders) ===
+Atom A   | Atom B   | Bond Index  
+------------------------------------
+C        | O        | 1.6005      
+C        | H        | 0.9688      
+C        | H        | 0.9688      
+
+=== Dipole moment ===
+μ = (0.0000, -0.0000, -4.7237) Debye
+|μ| = 4.7237 Debye
+
+=== Symmetry Allowed Transitions (TDM > 0) ===
+Initial MO                   | Final MO                     | Delta E (eV) | TDM Vector (x, y, z) [Debye]   | |TDM| [Debye]
+-------------------------------------------------------------------------------------------------------------------
+MO 1  (n (non-bonding))      | MO 8  (sigma)                | 41.1290      | ( 0.000, -0.000, -1.827)             | 1.8266
+MO 1  (n (non-bonding))      | MO 9  (sigma)                | 45.3879      | ( 0.000,  0.733, -0.000)             | 0.7331
+MO 1  (n (non-bonding))      | MO 10 (sigma)                | 57.1853      | ( 0.000,  0.000,  2.005)             | 2.0051
+MO 2  (sigma)                | MO 8  (sigma)                | 28.4197      | ( 0.000, -0.000, -1.618)             | 1.6177
+MO 2  (sigma)                | MO 9  (sigma)                | 32.6786      | ( 0.000,  2.834, -0.000)             | 2.8335
+MO 2  (sigma)                | MO 10 (sigma)                | 44.4760      | ( 0.000,  0.000, -0.750)             | 0.7496
+MO 3  (sigma)                | MO 8  (sigma)                | 23.4749      | ( 0.000,  1.653,  0.000)             | 1.6533
+MO 3  (sigma)                | MO 9  (sigma)                | 27.7338      | ( 0.000, -0.000, -0.794)             | 0.7940
+MO 3  (sigma)                | MO 10 (sigma)                | 39.5312      | ( 0.000,  1.679,  0.000)             | 1.6793
+MO 4  (n (non-bonding))      | MO 8  (sigma)                | 22.7239      | ( 0.000, -0.000, -0.932)             | 0.9318
+MO 4  (n (non-bonding))      | MO 9  (sigma)                | 26.9828      | ( 0.000, -1.353, -0.000)             | 1.3526
+MO 4  (n (non-bonding))      | MO 10 (sigma)                | 38.7802      | ( 0.000, -0.000,  2.711)             | 2.7115
+MO 5  (pi (px))              | MO 7  (pi (px))              | 5.8376       | ( 0.000, -0.000, -2.381)             | 2.3813
+MO 6  (n (non-bonding))      | MO 8  (sigma)                | 20.9238      | ( 0.000,  1.391,  0.000)             | 1.3914
+MO 6  (n (non-bonding))      | MO 9  (sigma)                | 25.1826      | ( 0.000,  0.000, -2.004)             | 2.0045
+MO 6  (n (non-bonding))      | MO 10 (sigma)                | 36.9800      | ( 0.000,  1.411, -0.000)             | 1.4112
+-------------------------------------------------------------------------------------------------------------------
+
+=== All MO characters ===
+MO  1:   -34.0748 eV | Character: n (non-bonding)
+MO  2:   -21.3655 eV | Character: sigma
+MO  3:   -16.4207 eV | Character: sigma
+MO  4:   -15.6698 eV | Character: n (non-bonding)
+MO  5:   -15.4901 eV | Character: pi (px)
+MO  6:   -13.8696 eV | Character: n (non-bonding)
+MO  7:    -9.6525 eV | Character: pi (px)
+MO  8:     7.0542 eV | Character: sigma
+MO  9:    11.3131 eV | Character: sigma
+MO 10:    23.1105 eV | Character: sigma

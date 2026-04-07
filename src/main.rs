@@ -86,14 +86,14 @@ impl _Orbital {
     }
 
     fn _orbital_type(&self) -> String {
-        match [self.l, self._m] {
-            [0, 0] => "s".to_string(),
-            [1, -1] => "px".to_string(),
-            [1, 0] => "py".to_string(),
-            [1, 1] => "pz".to_string(),
-            _ => "unknown".to_string()
-        }
+    match [self.l, self._m] {
+        [0, 0] => "s".to_string(),
+        [1, -1] => "py".to_string(),
+        [1, 0] => "pz".to_string(),
+        [1, 1] => "px".to_string(),
+        _ => "unknown".to_string()
     }
+}
 
     fn get_axis(&self) -> [f64; 3] {
         match (self.l, self._m) {
@@ -515,31 +515,25 @@ impl Molecule {
         "sigma".to_string()
     }
 
-    fn lowdin_populations(&self) {
-        println!("Performing Löwdin population analysis...");
+    fn lowdin_populations(&self, file: &mut std::fs::File) -> std::io::Result<()> {
+        writeln!(file, "===========================\n\nPerforming Löwdin population analysis...")?;
         
-        let c: &nalgebra::Matrix<f64, nalgebra::Dyn, nalgebra::Dyn, nalgebra::VecStorage<f64, nalgebra::Dyn, nalgebra::Dyn>> = self.c_matrix.as_ref().expect("Run solve() first!");
+        let c = self.c_matrix.as_ref().expect("Run solve() first!");
         let e = self.energies.as_ref().expect("Run solve() first!");
         let s_sqrt = self.s_sqrt.as_ref().expect("Run solve() first!");
         let n_atoms = self.atoms.len();
         let n_ao = self.orbitals.len();
+        
         let mut sorted_indices: Vec<usize> = (0..n_ao).collect();
         sorted_indices.sort_by(|&a, &b| e[a].partial_cmp(&e[b]).unwrap());
+        
         let mut total_valectrons = 0;
         
         let mut atom_valance_electron: Vec<f64> = vec![0.0; self.atoms.len()];
         for (i, atom) in self.atoms.iter().enumerate() {
             let val_e: usize = match atom._label.as_str() {
-                "H" => 1,
-                "Li" => 1,
-                "C" => 4,
-                "Si" => 4,
-                "N" => 5,
-                "P" => 5,
-                "O" => 6,
-                "S" => 6,
-                "F" => 7,
-                "Cl" => 7,
+                "H" => 1, "Li" => 1, "C" => 4, "Si" => 4, "N" => 5, "P" => 5,
+                "O" => 6, "S" => 6, "F" => 7, "Cl" => 7,
                 _ => panic!("Unknown element: {}", atom._label),
             };
             atom_valance_electron[i] = val_e as f64;
@@ -549,8 +543,8 @@ impl Molecule {
         let n_occ = total_valectrons / 2;
         let p_matrix = pop_analysis::orth_p_matrix(c, s_sqrt, n_occ, &sorted_indices);
         
-        println!("Total valence electrons: {}, Occupied MOs: {}", total_valectrons, n_occ);
-        println!("HOMO is MO {}", n_occ);
+        writeln!(file, "\nTotal valence electrons: {}, Occupied MOs: {}", total_valectrons, n_occ)?;
+        writeln!(file, "HOMO is MO {}", n_occ)?;
         
         let mut gap = vec![0.0; n_atoms];
         let mut q = vec![0.0; n_atoms];
@@ -565,13 +559,13 @@ impl Molecule {
             q[atom_id] += atom_valance_electron[atom_id] - gap[atom_id];
         }
 
-        println!("\nGross Atomic Populations:");
+        writeln!(file, "\nGross Atomic Populations:")?;
         for (i, pop) in gap.iter().enumerate() {
-            println!("Atom {} ({}): {:.4} Elektronen", i, self.atoms[i]._label, pop);
+            writeln!(file, "Atom {} ({}): {:.4} Elektronen", i, self.atoms[i]._label, pop)?;
         }
-        println!("Partial Charges:");
+        writeln!(file, "Partial Charges:")?;
         for (i, charge) in q.iter().enumerate() {
-            println!("Atom {} ({}): {:.4}", i, self.atoms[i]._label, charge);
+            writeln!(file, "Atom {} ({}): {:.4}", i, self.atoms[i]._label, charge)?;
         }
 
         let mut wbi_matrix = na::DMatrix::<f64>::zeros(n_atoms, n_atoms);
@@ -583,14 +577,14 @@ impl Molecule {
                 wbi_matrix[(a1, a2)] += p_val * p_val;
             }
         }
-        println!("\n=== Wiberg Bond Indices (Bond Orders) ===");
-        println!("{:<8} | {:<8} | {:<12}", "Atom A", "Atom B", "Bond Index");
-        println!("------------------------------------");
+        writeln!(file, "\n=== Wiberg Bond Indices (Bond Orders) ===")?;
+        writeln!(file, "{:<8} | {:<8} | {:<12}", "Atom A", "Atom B", "Bond Index")?;
+        writeln!(file, "------------------------------------")?;
         for i in 0..n_atoms {
             for j in i+1..n_atoms {
                 let bo = wbi_matrix[(i, j)];
                 if bo > 0.05 {
-                    println!("{:<8} | {:<8} | {:<12.4}", self.atoms[i]._label, self.atoms[j]._label, bo);
+                    writeln!(file, "{:<8} | {:<8} | {:<12.4}", self.atoms[i]._label, self.atoms[j]._label, bo)?;
                 }
             }
         }
@@ -599,15 +593,14 @@ impl Molecule {
         let mu_debye = mu * 2.5418;
         let mu_norm = mu_debye.norm();
 
-        println!("\n=== Dipole moment ===");
-        println!("μ = ({:.4}, {:.4}, {:.4}) Debye", mu_debye.x, mu_debye.y, mu_debye.z);
-        println!("|μ| = {:.4} Debye", mu_norm);
+        writeln!(file, "\n=== Dipole moment ===")?;
+        writeln!(file, "μ = ({:.4}, {:.4}, {:.4}) Debye", mu_debye.x, mu_debye.y, mu_debye.z)?;
+        writeln!(file, "|μ| = {:.4} Debye", mu_norm)?;
 
-        // --- Calculate All Allowed Transitions ---
-        println!("\n=== Symmetry Allowed Transitions (TDM > 0) ===");
-        println!("{:<28} | {:<28} | {:<12} | {:<30} | {:<10}", 
-                 "Initial MO", "Final MO", "Delta E (eV)", "TDM Vector (x, y, z) [Debye]", "|TDM| [Debye]");
-        println!("{:-<115}", "");
+        writeln!(file, "\n=== Symmetry Allowed Transitions (TDM > 0) ===")?;
+        writeln!(file, "{:<28} | {:<28} | {:<12} | {:<30} | {:<10}", 
+                 "Initial MO", "Final MO", "Delta E (eV)", "TDM Vector (x, y, z) [Debye]", "|TDM| [Debye]")?;
+        writeln!(file, "{:-<115}", "")?;
 
         for i in 0..n_occ {
             for j in n_occ..n_ao {
@@ -620,26 +613,30 @@ impl Molecule {
                 
                 if tdm_norm > 1e-4 {
                     let energy_gap = e[mo_j] - e[mo_i];
-                    
-                    // Fetch the character of the orbitals
                     let char_i = self.get_mo_character(mo_i);
                     let char_j = self.get_mo_character(mo_j);
                     
                     let label_i = format!("MO {:<2} ({})", i + 1, char_i);
                     let label_j = format!("MO {:<2} ({})", j + 1, char_j);
 
-                    println!(
+                    writeln!(file,
                         "{:<28} | {:<28} | {:<12.4} | ({:>6.3}, {:>6.3}, {:>6.3})             | {:.4}",
-                        label_i, 
-                        label_j, 
-                        energy_gap, 
-                        tdm_debye.x, tdm_debye.y, tdm_debye.z, 
-                        tdm_norm
-                    );
+                        label_i, label_j, energy_gap, 
+                        tdm_debye.x, tdm_debye.y, tdm_debye.z, tdm_norm
+                    )?;
                 }
             }
         }
-        println!("{:-<115}", "");
+        writeln!(file, "{:-<115}", "")?;
+
+        writeln!(file, "\n=== All MO characters ===")?;
+        for (rank, &mo_idx) in sorted_indices.iter().enumerate() {
+            let energy = e[mo_idx];
+            let mo_character = self.get_mo_character(mo_idx);
+            writeln!(file, "MO {:>2}: {:>10.4} eV | Character: {}", rank + 1, energy, mo_character)?;
+        }
+
+        Ok(()) // Wichtig: Rückgabewert signalisiert, dass alles fehlerfrei lief
     }
 
     fn transition_dipole_moment(&self, mo_i: usize, mo_j: usize) -> na::Vector3<f64> {
@@ -669,7 +666,145 @@ impl Molecule {
         }
         
         tdm 
-    }   
+    }  
+
+    fn evaluate_sto(&self, x: f64, y: f64, z: f64, atom_x: f64, atom_y: f64, atom_z: f64, n: i32, zeta: f64, type_label: &str) -> f64 {
+    let dx = x - atom_x;
+    let dy = y - atom_y;
+    let dz = z - atom_z;
+    let r = (dx*dx + dy*dy + dz*dz).sqrt();
+
+    // 1. Radiale Normierungskonstante berechnen: (2 * zeta)^(n + 0.5) / sqrt((2n)!)
+    let mut fact = 1.0;
+    for i in 1..=(2 * n) {
+        fact *= i as f64;
+    }
+    let n_rad = (2.0 * zeta).powf(n as f64 + 0.5) / fact.sqrt();
+    
+    // Radialer Teil
+    let radial = n_rad * r.powi(n - 1) * (-zeta * r).exp();
+
+    // 2. Angulare Normierungskonstante und Winkelanteil
+    let pi = std::f64::consts::PI;
+    match type_label {
+        "s" => {
+            let n_ang = (1.0 / (4.0 * pi)).sqrt();
+            radial * n_ang
+        },
+        "px" | "py" | "pz" => {
+            let n_ang = (3.0 / (4.0 * pi)).sqrt();
+            if r < 1e-10 {
+                0.0 // Direkt am Kernknotenpunkt ist p null
+            } else {
+                let angular = match type_label {
+                    "px" => dx / r,
+                    "py" => dy / r,
+                    "pz" => dz / r,
+                    _ => 0.0,
+                };
+                radial * n_ang * angular
+            }
+        },
+        _ => 0.0,
+    }
+}
+    
+    fn export_cube(&self, mo_index: usize, filename: &str) -> std::io::Result<()> {
+        let n_grid = 80;
+        let padding = 6.0; // Puffer um das Molekül (in Bohr)
+
+        // 1. Finde die Bounding Box des Moleküls (Min und Max Koordinaten)
+        let mut min_x = f64::MAX; let mut min_y = f64::MAX; let mut min_z = f64::MAX;
+        let mut max_x = f64::MIN; let mut max_y = f64::MIN; let mut max_z = f64::MIN;
+
+        for atom in &self.atoms {
+            if atom.position[0] < min_x { min_x = atom.position[0]; }
+            if atom.position[1] < min_y { min_y = atom.position[1]; }
+            if atom.position[2] < min_z { min_z = atom.position[2]; }
+            if atom.position[0] > max_x { max_x = atom.position[0]; }
+            if atom.position[1] > max_y { max_y = atom.position[1]; }
+            if atom.position[2] > max_z { max_z = atom.position[2]; }
+        }
+
+        // 2. Startpunkt und Schrittweite definieren
+        let origin_x = min_x - padding;
+        let origin_y = min_y - padding;
+        let origin_z = min_z - padding;
+
+        let step_x = (max_x - min_x + 2.0 * padding) / (n_grid as f64 - 1.0);
+        let step_y = (max_y - min_y + 2.0 * padding) / (n_grid as f64 - 1.0);
+        let step_z = (max_z - min_z + 2.0 * padding) / (n_grid as f64 - 1.0);
+
+        // Datei öffnen
+        let file = std::fs::File::create(filename)?;
+        let mut writer = std::io::BufWriter::new(file);
+
+        // 3. Cube Header schreiben
+        writeln!(writer, "Extended Hueckel MO {} generated by Rust", mo_index + 1)?;
+        writeln!(writer, "Grid: {}x{}x{}", n_grid, n_grid, n_grid)?;
+        // Zeile 3: Anzahl Atome und Ursprung (x, y, z in Bohr)
+        writeln!(writer, "{:5} {:12.6} {:12.6} {:12.6}", self.atoms.len(), origin_x, origin_y, origin_z)?;
+        // Zeilen 4-6: Achsen-Vektoren
+        writeln!(writer, "{:5} {:12.6} {:12.6} {:12.6}", n_grid, step_x, 0.0, 0.0)?;
+        writeln!(writer, "{:5} {:12.6} {:12.6} {:12.6}", n_grid, 0.0, step_y, 0.0)?;
+        writeln!(writer, "{:5} {:12.6} {:12.6} {:12.6}", n_grid, 0.0, 0.0, step_z)?;
+
+        // 4. Atome eintragen (Ordnungszahl, Ladung (0.0), x, y, z)
+        for atom in &self.atoms {
+            writeln!(writer, "{:5} {:12.6} {:12.6} {:12.6} {:12.6}", 
+                atom._z, 0.0, atom.position[0], atom.position[1], atom.position[2])?;
+        }
+
+        // Koeffizienten-Spalte für das gewünschte MO holen
+        let c_matrix = self.c_matrix.as_ref().unwrap();
+
+        // 5. Gitterpunkte berechnen
+        let mut val_count = 0;
+        for ix in 0..n_grid {
+            let x = origin_x + (ix as f64) * step_x;
+            for iy in 0..n_grid {
+                let y = origin_y + (iy as f64) * step_y;
+                for iz in 0..n_grid {
+                    let z = origin_z + (iz as f64) * step_z;
+
+                    // LCAO auswerten
+                    let mut psi_val = 0.0;
+                    for (mu, orbital) in self.orbitals.iter().enumerate() {
+                        let c_mu = c_matrix[(mu, mo_index)];
+                        if c_mu.abs() < 1e-6 { continue; } // Kleine Optimierung
+                        
+                        let atom = &self.atoms[orbital.atom_id];
+                        
+                        // Exponent und Orbital-Typ über deine bereits vorhandenen Methoden abrufen!
+                        let zeta = self.get_exponent(orbital);
+                        let orb_type = orbital._orbital_type();
+                        
+                        // Hier wird vorausgesetzt, dass evaluate_sto entweder als Methode `self.evaluate_sto`
+                        // existiert, oder eine freie Funktion ist. Passe es an, je nachdem wie du es eingefügt hast.
+                        let phi_mu = self.evaluate_sto(
+                            x, y, z, 
+                            atom.position[0], atom.position[1], atom.position[2], 
+                            orbital.n as i32, 
+                            zeta, 
+                            &orb_type
+                        );
+                        
+                        psi_val += c_mu * phi_mu;
+                    }
+
+                    // Ins File schreiben (maximal 6 Werte pro Zeile)
+                    write!(writer, " {:13.5E}", psi_val)?;
+                    val_count += 1;
+                    if val_count % 6 == 0 {
+                        writeln!(writer)?;
+                    }
+                }
+            }
+        }
+        if val_count % 6 != 0 { writeln!(writer)?; } // Letzte Zeile abschließen
+
+        Ok(())
+    }
 }
 
 fn main() {
@@ -775,6 +910,31 @@ fn main() {
 }
     write_output(&molecule).expect("Failed to write output");
 
-    molecule.lowdin_populations();
+    let mut file = std::fs::OpenOptions::new()
+        .append(true)
+        .open("eht_output.txt")
+        .expect("Konnte eht_output.txt nicht zum Anhängen öffnen!");
 
+    // Führe Populationsanalyse aus und übergebe die Datei-Referenz
+    molecule.lowdin_populations(&mut file).expect("Failed to write populations");
+
+    // Index ist 0-basiert, also ist 5 das MO 6!
+    let n_mos = molecule.orbitals.len();
+    
+    println!("\nBerechne 3D-Gitter für alle {} MOs...", n_mos);
+    
+    for i in 0..n_mos {
+        // Wir erstellen dynamisch den Dateinamen, z.B. "mo_1.cube", "mo_2.cube"
+        // (i + 1), damit die Nummerierung bei 1 anfängt, genau wie im Output
+        let filename = format!("mo_{}.cube", i + 1);
+        
+        // Cube-Datei für das aktuelle MO exportieren
+        molecule.export_cube(i, &filename).expect("Fehler beim Cube-Export");
+        
+        println!("{} erfolgreich erstellt!", filename);
+    }
+    
+    println!("Alle Cube-Dateien wurden exportiert! Drücke Enter zum Beenden...");
+    let mut _pause = String::new();
+    std::io::stdin().read_line(&mut _pause).unwrap();
 }
