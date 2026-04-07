@@ -918,18 +918,21 @@ fn main() {
     // Führe Populationsanalyse aus und übergebe die Datei-Referenz
     molecule.lowdin_populations(&mut file).expect("Failed to write populations");
 
-    // Index ist 0-basiert, also ist 5 das MO 6!
     let n_mos = molecule.orbitals.len();
+    let energies = molecule.energies.as_ref().unwrap();
     
-    println!("\nBerechne 3D-Gitter für alle {} MOs...", n_mos);
+    // Sortierte Indizes genau wie beim Text-Output erstellen
+    let mut sorted_indices: Vec<usize> = (0..n_mos).collect();
+    sorted_indices.sort_by(|&a, &b| energies[a].partial_cmp(&energies[b]).unwrap());
+
+    println!("\nBerechne 3D-Gitter für alle {} MOs (sortiert nach Energie)...", n_mos);
     
-    for i in 0..n_mos {
-        // Wir erstellen dynamisch den Dateinamen, z.B. "mo_1.cube", "mo_2.cube"
-        // (i + 1), damit die Nummerierung bei 1 anfängt, genau wie im Output
-        let filename = format!("mo_{}.cube", i + 1);
+    // Über die sortierten Indizes iterieren (rank = 0, 1, 2... | mo_idx = echter Matrix-Index)
+    for (rank, &mo_idx) in sorted_indices.iter().enumerate() {
+        let filename = format!("mo_{}.cube", rank + 1);
         
-        // Cube-Datei für das aktuelle MO exportieren
-        molecule.export_cube(i, &filename).expect("Fehler beim Cube-Export");
+        // WICHTIG: Hier mo_idx übergeben, NICHT rank!
+        molecule.export_cube(mo_idx, &filename).expect("Fehler beim Cube-Export");
         
         println!("{} erfolgreich erstellt!", filename);
     }
