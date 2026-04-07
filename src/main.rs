@@ -779,8 +779,6 @@ impl Molecule {
                         let zeta = self.get_exponent(orbital);
                         let orb_type = orbital._orbital_type();
                         
-                        // Hier wird vorausgesetzt, dass evaluate_sto entweder als Methode `self.evaluate_sto`
-                        // existiert, oder eine freie Funktion ist. Passe es an, je nachdem wie du es eingefügt hast.
                         let phi_mu = self.evaluate_sto(
                             x, y, z, 
                             atom.position[0], atom.position[1], atom.position[2], 
@@ -936,8 +934,4 @@ fn main() {
         
         println!("{} erfolgreich erstellt!", filename);
     }
-    
-    println!("Alle Cube-Dateien wurden exportiert! Drücke Enter zum Beenden...");
-    let mut _pause = String::new();
-    std::io::stdin().read_line(&mut _pause).unwrap();
 }
