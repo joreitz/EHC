@@ -95,26 +95,47 @@ with st.sidebar:
 if xyz_file is not None:
     # Button zum Starten der Berechnung anzeigen
     if st.button("▶️ Quantenchemische Berechnung starten", type="primary"):
-        with st.spinner("Schreibe xyz-Datei und starte Rust-Berechnung... 🦀"):
-            # 1. Die hochgeladene Datei speichern, damit Rust sie lesen kann
-            with open("struc.xyz", "wb") as f:
-                f.write(xyz_file.getvalue())
+        # 1. Die hochgeladene Datei speichern
+        with open("struc.xyz", "wb") as f:
+            f.write(xyz_file.getvalue())
+        
+        st.info("Starte Rust-Backend... 🦀")
+        
+        # Ein leeres Feld für unser Live-Terminal in Streamlit erstellen
+        log_placeholder = st.empty()
+        log_text = ""
+
+        # 2. Rust-Programm ausführen und den Output streamen
+        try:
+            # Popen erlaubt es uns, den Output live zu lesen
+            process = subprocess.Popen(
+                ["cargo", "run", "--release"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT, # Wir werfen Fehlermeldungen und normalen Output zusammen
+                text=True,
+                bufsize=1, # Zeilenweise puffern
+                universal_newlines=True
+            )
+
+            # Zeile für Zeile auslesen und im Dashboard aktualisieren
+            for line in process.stdout:
+                log_text += line
+                # Das log_text in einem schönen Code-Block anzeigen (Scrollbar entsteht automatisch)
+                log_placeholder.code(log_text, language="bash")
             
-            # 2. Rust-Programm über das Terminal ausführen
-            try:
-                # Führt `cargo run --release` aus
-                result = subprocess.run(
-                    ["cargo", "run", "--release"], 
-                    check=True, 
-                    capture_output=True, 
-                    text=True
-                )
+            # Warten, bis der Prozess wirklich beendet ist
+            process.wait()
+
+            # Prüfen, ob das Programm fehlerfrei durchgelaufen ist (Exit-Code 0)
+            if process.returncode == 0:
                 st.success("Berechnung erfolgreich abgeschlossen!")
-            except subprocess.CalledProcessError as e:
-                st.error("Fehler bei der Rust-Berechnung!")
-                st.code(e.stderr) # Zeigt die Fehlermeldung vom Rust-Compiler an
+            else:
+                st.error(f"Fehler bei der Rust-Berechnung! (Exit code: {process.returncode})")
                 st.stop()
 
+        except Exception as e:
+            st.error(f"Fehler beim Starten des Backend-Prozesses: {e}")
+            st.stop()
 # --- Ergebnisse Anzeigen ---
 # Wir prüfen, ob die Rust-Berechnung eine output-Datei hinterlassen hat
 if os.path.exists("eht_output.txt"):
