@@ -218,12 +218,54 @@ if os.path.exists("eht_output.txt"):
                 ))
 
                 # Atome zeichnen
-                color_map = {1: 'lightgray', 6: 'black', 7: 'blue', 8: 'red'}
+               # --- Atome und Bindungen zeichnen ---
+                
+                # Koordinaten für einfachen Zugriff entpacken
+                atom_x = [a['pos'][0] for a in atoms]
+                atom_y = [a['pos'][1] for a in atoms]
+                atom_z = [a['pos'][2] for a in atoms]
+
+                # 1. Bindungen (Linien) anhand des Abstands berechnen
+                bond_x, bond_y, bond_z = [], [], []
+                threshold = 3.4 # Maximaler Bindungsabstand in Bohr (ca. 1.8 Å)
+                
+                for i in range(len(atoms)):
+                    for j in range(i + 1, len(atoms)):
+                        # Euklidischer Abstand in 3D
+                        dist = np.sqrt(
+                            (atom_x[i] - atom_x[j])**2 + 
+                            (atom_y[i] - atom_y[j])**2 + 
+                            (atom_z[i] - atom_z[j])**2
+                        )
+                        # Wenn die Atome nah genug sind, Linie einfügen (None unterbricht die Linie danach)
+                        if 0.1 < dist < threshold:
+                            bond_x.extend([atom_x[i], atom_x[j], None])
+                            bond_y.extend([atom_y[i], atom_y[j], None])
+                            bond_z.extend([atom_z[i], atom_z[j], None])
+
+                # Bindungslinien dem 3D-Plot hinzufügen
+                if bond_x:
+                    fig3d.add_trace(go.Scatter3d(
+                        x=bond_x, y=bond_y, z=bond_z,
+                        mode='lines',
+                        line=dict(color='darkgray', width=6),
+                        name='Bindungen', hoverinfo="none"
+                    ))
+
+                # 2. Atome als kleine farbige Kugeln einzeichnen
+                # Erweitertes CPK-Farbmodell (1=H, 6=C, 7=N, 8=O, 9=F)
+                color_map = {1: '#d3d3d3', 6: '#333333', 7: 'blue', 8: 'red', 9: 'green'}
+                atom_colors = [color_map.get(a['z'], 'magenta') for a in atoms]
+
                 fig3d.add_trace(go.Scatter3d(
-                    x=[a['pos'][0] for a in atoms], y=[a['pos'][1] for a in atoms], z=[a['pos'][2] for a in atoms],
-                    mode='markers', marker=dict(size=10, color=[color_map.get(a['z'], 'green') for a in atoms]),
+                    x=atom_x, y=atom_y, z=atom_z,
+                    mode='markers',
+                    # Ein kleiner schwarzer Rand (line) macht die Atome dreidimensionaler
+                    marker=dict(size=12, color=atom_colors, line=dict(color='black', width=2)),
                     name='Atome', hoverinfo="none"
                 ))
+                
+                # --- Ende Atome und Bindungen zeichnen ---
 
                 fig3d.update_layout(
                     scene=dict(xaxis_title='X (Bohr)', yaxis_title='Y (Bohr)', zaxis_title='Z (Bohr)', aspectmode='data'),
