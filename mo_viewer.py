@@ -108,22 +108,71 @@ if os.path.exists("eht_output.txt"):
                 mime="text/plain"
             )
         
-        mo_list = sorted(energies.keys())
-        selected_mo = st.selectbox("Wähle MO:", mo_list, index=max(0, homo_idx-1))
-        
+        # --- Verbessertes Energieniveaudiagramm ---
         fig2d = go.Figure()
-        for mo_id, energy in energies.items():
-            occ = mo_id <= homo_idx
-            color = "orange" if mo_id == selected_mo else ("blue" if occ else "red")
-            fig2d.add_trace(go.Scatter(
-                x=[-0.2, 0.2], y=[energy, energy], mode="lines",
-                line=dict(color=color, width=8 if mo_id == selected_mo else 4),
-                hovertext=f"MO {mo_id}: {characters.get(mo_id, '')}", hoverinfo="text", showlegend=False
-            ))
-            if occ:
-                fig2d.add_annotation(x=0, y=energy, text="⥮", showarrow=False, font=dict(size=16, color=color))
+        
+        # Horizontale Nulllinie (Referenz)
+        fig2d.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="0 eV", annotation_position="bottom right")
 
-        fig2d.update_layout(yaxis_title="Energie (eV)", xaxis=dict(showticklabels=False), height=500, margin=dict(t=10))
+        x_center = 0
+        line_width = 0.5 # Wieder breiter für bessere Sichtbarkeit
+
+        for mo_id, energy in energies.items():
+            is_occupied = mo_id <= homo_idx
+            
+            # Highlight für ausgewähltes MO
+            if mo_id == selected_mo:
+                color = "orange"
+                width = 10
+            else:
+                color = "blue" if is_occupied else "red"
+                width = 5
+
+            char = characters.get(mo_id, "Unknown")
+            hover_text = f"MO {mo_id}<br>Energie: {energy:.4f} eV<br>Charakter: {char}"
+
+            # Die Energielinie
+            fig2d.add_trace(go.Scatter(
+                x=[x_center - line_width/2, x_center + line_width/2],
+                y=[energy, energy],
+                mode="lines",
+                line=dict(color=color, width=width),
+                name=f"MO {mo_id}",
+                hoverinfo="text",
+                hovertext=hover_text,
+                showlegend=False
+            ))
+
+            # Besetzungspfeile (schön zentriert über der Linie)
+            if is_occupied:
+                fig2d.add_annotation(
+                    x=x_center, 
+                    y=energy, 
+                    text="⥮", 
+                    showarrow=False, 
+                    font=dict(size=20, color=color), 
+                    yanchor="bottom",
+                    yshift=2 # Kleiner Versatz nach oben
+                )
+
+        # Layout-Optimierung für maximale Übersichtlichkeit
+        fig2d.update_layout(
+            yaxis_title="Energie (eV)",
+            xaxis=dict(showticklabels=False, range=[-0.6, 0.6]), # Mehr Platz an den Seiten
+            plot_bgcolor="white",
+            height=650, # Wieder etwas höher
+            margin=dict(l=20, r=20, t=30, b=20),
+            hovermode="closest"
+        )
+        
+        # Gitterlinien für die Energie-Achse
+        fig2d.update_yaxes(
+            showgrid=True, 
+            gridwidth=1, 
+            gridcolor='LightGray', 
+            zeroline=False
+        )
+        
         st.plotly_chart(fig2d, width="stretch")
 
     with col2:
