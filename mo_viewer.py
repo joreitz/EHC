@@ -110,7 +110,8 @@ if os.path.exists("eht_output.txt"):
         
         # --- Verbessertes Energieniveaudiagramm ---
         fig2d = go.Figure()
-        
+        o_list = sorted(energies.keys())
+        selected_mo = st.selectbox("Wähle ein MO zur 3D-Ansicht:", mo_list, index=max(0, homo_idx-1))
         # Horizontale Nulllinie (Referenz)
         fig2d.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="0 eV", annotation_position="bottom right")
 
