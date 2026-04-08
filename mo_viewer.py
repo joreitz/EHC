@@ -108,62 +108,94 @@ if os.path.exists("eht_output.txt"):
                 mime="text/plain"
             )
         
-        # --- WICHTIG: DIESE ZEILE HAT GEFEHLT ---
+        # --- AUSWAHLBOX FÜR 3D ---
         mo_list = sorted(energies.keys())
         selected_mo = st.selectbox("Wähle ein MO zur 3D-Ansicht:", mo_list, index=max(0, homo_idx-1))
-        # ----------------------------------------
 
-        # --- Verbessertes Energieniveaudiagramm ---
+        # --- Verbessertes Energieniveaudiagramm mit Entartungs-Logik ---
         fig2d = go.Figure()
+        fig2d.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="0 eV")
+
+        # 1. MOs nach Energie gruppieren (Toleranz für numerische Gleichheit)
+        tolerance = 0.001
+        energy_groups = []
         
-        # Horizontale Nulllinie
-        fig2d.add_hline(y=0, line_dash="dash", line_color="gray", annotation_text="0 eV", annotation_position="bottom right")
+        sorted_mo_ids = sorted(energies.keys())
+        for mo_id in sorted_mo_ids:
+            energy = energies[mo_id]
+            added = False
+            for group in energy_groups:
+                # Wenn die Energie fast gleich der Gruppen-Energie ist, hinzufügen
+                if abs(group['energy'] - energy) < tolerance:
+                    group['mo_ids'].append(mo_id)
+                    added = True
+                    break
+            if not added:
+                energy_groups.append({'energy': energy, 'mo_ids': [mo_id]})
 
-        x_center = 0
-        line_width = 0.5 
-
-        for mo_id, energy in energies.items():
-            is_occupied = mo_id <= homo_idx
+        # 2. Farbschema basierend auf Charakter definieren
+        def get_mo_color(mo_id, char_text, is_selected):
+            if is_selected:
+                return "orange"
             
-            # Jetzt ist selected_mo bekannt!
-            if mo_id == selected_mo:
-                color = "orange"
-                width = 10
-            else:
-                color = "blue" if is_occupied else "red"
-                width = 5
+            char_text = char_text.lower()
+            if "pi" in char_text or "π" in char_text:
+                return "#1f77b4" # Blau für Pi
+            elif "sigma" in char_text or "σ" in char_text:
+                return "#2ca02c" # Grün für Sigma
+            elif "non-bonding" in char_text or " n " in char_text or "lp" in char_text:
+                return "#ff7f0e" # Orange/Gelb für nichtbindend
+            return "gray"
 
-            char = characters.get(mo_id, "Unknown")
-            hover_text = f"MO {mo_id}<br>Energie: {energy:.4f} eV<br>Charakter: {char}"
+        # 3. Gruppen plotten
+        line_spacing = 0.6  # Abstand zwischen entarteten Niveaus
+        base_width = 0.4    # Breite einer einzelnen Linie
 
-            fig2d.add_trace(go.Scatter(
-                x=[x_center - line_width/2, x_center + line_width/2],
-                y=[energy, energy],
-                mode="lines",
-                line=dict(color=color, width=width),
-                name=f"MO {mo_id}",
-                hoverinfo="text",
-                hovertext=hover_text,
-                showlegend=False
-            ))
+        for group in energy_groups:
+            num_mos = len(group['mo_ids'])
+            energy = group['energy']
+            
+            for i, mo_id in enumerate(group['mo_ids']):
+                # X-Versatz berechnen: Zentriert um 0
+                x_offset = (i - (num_mos - 1) / 2) * line_spacing
+                
+                is_selected = (mo_id == selected_mo)
+                is_occupied = (mo_id <= homo_idx)
+                
+                char_text = characters.get(mo_id, "Unknown")
+                color = get_mo_color(mo_id, char_text, is_selected)
+                
+                # Linienstärke: Besetzt = durchgezogen fett, Unbesetzt = etwas dünner
+                width = 10 if is_selected else (6 if is_occupied else 3)
+                dash = "solid" if is_occupied else "dot"
 
-            if is_occupied:
-                fig2d.add_annotation(
-                    x=x_center, y=energy, text="⥮", showarrow=False, 
-                    font=dict(size=20, color=color), yanchor="bottom", yshift=2
-                )
+                hover_text = f"MO {mo_id}<br>Energie: {energy:.4f} eV<br>Charakter: {char_text}"
+
+                fig2d.add_trace(go.Scatter(
+                    x=[x_offset - base_width/2, x_offset + base_width/2],
+                    y=[energy, energy],
+                    mode="lines",
+                    line=dict(color=color, width=width, dash=dash),
+                    hoverinfo="text",
+                    hovertext=hover_text,
+                    showlegend=False
+                ))
+
+                if is_occupied:
+                    fig2d.add_annotation(
+                        x=x_offset, y=energy, text="⥮", showarrow=False,
+                        font=dict(size=20, color=color), yanchor="bottom", yshift=2
+                    )
 
         fig2d.update_layout(
             yaxis_title="Energie (eV)",
-            xaxis=dict(showticklabels=False, range=[-0.6, 0.6]),
+            xaxis=dict(showticklabels=False, range=[-1.5, 1.5]), # Range vergrößert für Nebenher-Anzeige
             plot_bgcolor="white",
-            height=650,
+            height=700,
             margin=dict(l=20, r=20, t=30, b=20)
         )
         fig2d.update_yaxes(showgrid=True, gridwidth=1, gridcolor='LightGray', zeroline=False)
-        
-        st.plotly_chart(fig2d, width="stretch")
-
+        st.plotly_chart(fig2d, use_container_width=True)
     with col2:
         st.subheader(f"3D: MO {selected_mo}")
         cube_file = f"mo_{selected_mo}.cube"
